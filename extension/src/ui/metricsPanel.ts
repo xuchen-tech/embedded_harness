@@ -2,12 +2,14 @@ import * as vscode from 'vscode';
 import { MetricsSnapshot } from '../types';
 
 type ProcessClickHandler = (pid: number, targetId: string) => void;
+type ProfileHandler = (pid: number, targetId: string, label: string) => void;
 
 export class MetricsPanel {
   public static current: MetricsPanel | undefined;
   private readonly panel: vscode.WebviewPanel;
   private history: Array<{ t: number; cpu: number; memUsed: number }> = [];
   private onProcessClick?: ProcessClickHandler;
+  private onProfile?: ProfileHandler;
 
   private constructor(panel: vscode.WebviewPanel) {
     this.panel = panel;
@@ -15,6 +17,9 @@ export class MetricsPanel {
     this.panel.webview.onDidReceiveMessage((msg) => {
       if (msg.type === 'openProcess' && typeof msg.pid === 'number' && msg.targetId) {
         this.onProcessClick?.(msg.pid, msg.targetId);
+      }
+      if (msg.type === 'profileProcess' && typeof msg.pid === 'number' && msg.targetId && msg.label) {
+        this.onProfile?.(msg.pid, msg.targetId, msg.label);
       }
     });
     this.panel.onDidDispose(() => {
@@ -24,6 +29,10 @@ export class MetricsPanel {
 
   setProcessClickHandler(handler: ProcessClickHandler): void {
     this.onProcessClick = handler;
+  }
+
+  setProfileHandler(handler: ProfileHandler): void {
+    this.onProfile = handler;
   }
 
   static show(_extensionUri: vscode.Uri): MetricsPanel {
@@ -81,6 +90,7 @@ export class MetricsPanel {
     tr.clickable { cursor: pointer; }
     tr.clickable:hover { background: var(--vscode-list-hoverBackground); }
     .hint { font-size: 11px; opacity: 0.75; margin: 4px 0 8px; }
+    button.flame { cursor: pointer; font-size: 11px; padding: 2px 6px; }
   </style>
 </head>
 <body>
@@ -91,8 +101,8 @@ export class MetricsPanel {
   </div>
   <canvas id="chart" width="900" height="220"></canvas>
   <h3>Watched Processes</h3>
-  <p class="hint">Business names auto-resolve to match rules. Click a row for /proc details.</p>
-  <table><thead><tr><th>Label</th><th>PID</th><th>Name</th><th>CPU %</th><th>Mem (KB)</th></tr></thead><tbody id="watched"></tbody></table>
+  <p class="hint">Click row for /proc details. 🔥 = 15s perf flame graph (requires perf on target).</p>
+  <table><thead><tr><th>Label</th><th>PID</th><th>Name</th><th>CPU %</th><th>Mem (KB)</th><th></th></tr></thead><tbody id="watched"></tbody></table>
   <h3>Top Processes</h3>
   <p class="hint">Click a row for /proc details.</p>
   <table><thead><tr><th>PID</th><th>Name</th><th>Mem (KB)</th></tr></thead><tbody id="procs"></tbody></table>
@@ -126,12 +136,24 @@ export class MetricsPanel {
       ctx.stroke();
     }
 
-    function bindRow(tr, pid) {
+    function bindRow(tr, pid, label) {
       tr.className = 'clickable';
       tr.title = 'Click for /proc status, memory, threads';
-      tr.addEventListener('click', () => {
+      tr.addEventListener('click', (ev) => {
+        if (ev.target && ev.target.classList && ev.target.classList.contains('flame')) return;
         vscode.postMessage({ type: 'openProcess', pid, targetId: currentTargetId });
       });
+      const td = document.createElement('td');
+      const btn = document.createElement('button');
+      btn.className = 'flame';
+      btn.textContent = '🔥';
+      btn.title = '15s perf flame graph';
+      btn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        vscode.postMessage({ type: 'profileProcess', pid, targetId: currentTargetId, label: label || String(pid) });
+      });
+      td.appendChild(btn);
+      tr.appendChild(td);
     }
 
     window.addEventListener('message', (e) => {
@@ -150,14 +172,14 @@ export class MetricsPanel {
       const wp = m.watchedProcesses || [];
       if (wp.length === 0) {
         const tr = document.createElement('tr');
-        tr.innerHTML = '<td colspan="5"><em>No watched processes — Add Watched Process (command palette)</em></td>';
+        tr.innerHTML = '<td colspan="6"><em>No watched processes — Add Watched Process (command palette)</em></td>';
         watched.appendChild(tr);
       } else {
         wp.forEach(p => {
           const tr = document.createElement('tr');
           tr.innerHTML = '<td>' + (p.label || p.match) + '</td><td>' + p.pid + '</td><td>' + p.name +
             '</td><td>' + (p.cpuPercent ?? 0).toFixed(1) + '</td><td>' + p.memKb + '</td>';
-          bindRow(tr, p.pid);
+          bindRow(tr, p.pid, p.label || p.match || p.name);
           watched.appendChild(tr);
         });
       }
@@ -166,7 +188,11 @@ export class MetricsPanel {
       (m.topProcesses || []).slice(0, 10).forEach(p => {
         const tr = document.createElement('tr');
         tr.innerHTML = '<td>' + p.pid + '</td><td>' + p.name + '</td><td>' + p.memKb + '</td>';
-        bindRow(tr, p.pid);
+        tr.className = 'clickable';
+        tr.title = 'Click for /proc details';
+        tr.addEventListener('click', () => {
+          vscode.postMessage({ type: 'openProcess', pid: p.pid, targetId: currentTargetId });
+        });
         tbody.appendChild(tr);
       });
       draw();

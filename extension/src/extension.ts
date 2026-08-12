@@ -26,6 +26,8 @@ import { addWslTargetInteractive } from './core/wslSetup';
 import { isWslAvailable } from './transport/wslClient';
 import { fetchProcessDetail, showProcessDetailPanel } from './core/processDetail';
 import { resolveAndPickWatchRule, watchRuleToEntry } from './core/watchProcessWizard';
+import { ensurePerfOrGuide, profileProcessFlameGraph } from './core/perfProfile';
+import { FlameGraphPanel } from './ui/flameGraphPanel';
 import { TargetConfig } from './types';
 
 class TargetTreeProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
@@ -149,6 +151,68 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const cfg = () => vscode.workspace.getConfiguration('embeddedHarness');
   const pollMs = () => cfg().get<number>('pollIntervalMs') ?? 3000;
+  const profileDurationSec = () => cfg().get<number>('perfProfileDurationSec') ?? 15;
+
+  const runProfileForProcess = async (
+    targetId: string,
+    pid: number,
+    label: string
+  ): Promise<void> => {
+    const session = sessions.get(targetId);
+    if (!session?.isConnected()) {
+      vscode.window.showWarningMessage('Connect target first.');
+      return;
+    }
+    const caps = session.getCapabilities();
+    if (!caps) {
+      vscode.window.showWarningMessage('Capabilities unavailable.');
+      return;
+    }
+
+    const perfStatus = await ensurePerfOrGuide(
+      session.getTransport(),
+      caps,
+      context.extensionPath
+    );
+    if (!perfStatus) {
+      return;
+    }
+
+    const duration = profileDurationSec();
+    const outDir = path.join(context.globalStorageUri.fsPath, 'perf', targetId.replace(/[^\w-]/g, '_'));
+
+    try {
+      const result = await vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Notification,
+          title: `perf record ${label} (PID ${pid}, ${duration}s)…`,
+          cancellable: false,
+        },
+        () =>
+          profileProcessFlameGraph(
+            session.getTransport(),
+            pid,
+            label,
+            duration,
+            outDir,
+            perfStatus
+          )
+      );
+
+      FlameGraphPanel.show(result.svg, `Flame: ${label}`);
+      if (result.sampleCount === 0) {
+        vscode.window.showWarningMessage(
+          'No stack samples. Ensure the process was active; try sudo sysctl kernel.perf_event_paranoid=-1.'
+        );
+      } else {
+        vscode.window.showInformationMessage(
+          `Flame graph ready (${result.sampleCount} samples). Saved: ${result.svgPath}`
+        );
+      }
+    } catch (e) {
+      vscode.window.showErrorMessage(`perf profile failed: ${e}`);
+    }
+  };
 
   const writeMcpState = () => {
     const statePath = path.join(context.globalStorageUri.fsPath, 'mcp', 'state.json');
@@ -193,6 +257,9 @@ export function activate(context: vscode.ExtensionContext): void {
       } catch (e) {
         vscode.window.showErrorMessage(`Process detail failed: ${e}`);
       }
+    });
+    metricsPanel.setProfileHandler(async (pid, targetId, label) => {
+      await runProfileForProcess(targetId, pid, label);
     });
     const timeline = TimelineView.show();
     logView.show();
@@ -472,6 +539,35 @@ export function activate(context: vscode.ExtensionContext): void {
         }
       }
       vscode.window.showInformationMessage(`Removed watched process "${pick.match}".`);
+    }),
+
+    vscode.commands.registerCommand('embeddedHarness.profileWatchedProcess', async () => {
+      const targets = getTargetsFromSettings();
+      const id = await vscode.window.showQuickPick(targets.map((t) => t.id), {
+        placeHolder: 'Target',
+      });
+      if (!id) return;
+      const session = sessions.get(id);
+      if (!session?.isConnected()) {
+        vscode.window.showWarningMessage('Connect target first.');
+        return;
+      }
+      const watched = session.getLatestMetrics()?.watchedProcesses ?? [];
+      if (watched.length === 0) {
+        vscode.window.showWarningMessage('No watched processes in latest metrics. Add one first.');
+        return;
+      }
+      const pick = await vscode.window.showQuickPick(
+        watched.map((p) => ({
+          label: `${p.label || p.match} (PID ${p.pid}, ${p.name})`,
+          description: `CPU ${(p.cpuPercent ?? 0).toFixed(1)}% · ${p.memKb} KB`,
+          pid: p.pid,
+          name: p.label || p.match || p.name,
+        })),
+        { placeHolder: 'Select process to profile (15s perf + flame graph)' }
+      );
+      if (!pick) return;
+      await runProfileForProcess(id, pick.pid, pick.name);
     }),
 
     vscode.commands.registerCommand('embeddedHarness.addCustomLogPath', async () => {

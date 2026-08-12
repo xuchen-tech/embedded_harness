@@ -28,6 +28,7 @@
       { "command": "embeddedHarness.runDiagnostic", "title": "Embedded Harness: Run Diagnostic Template" },
       { "command": "embeddedHarness.addWatchedProcess", "title": "Embedded Harness: Add Watched Process (Auto Match)" },
       { "command": "embeddedHarness.removeWatchedProcess", "title": "Embedded Harness: Remove Watched Process" },
+      { "command": "embeddedHarness.profileWatchedProcess", "title": "Embedded Harness: Profile Watched Process (15s Flame Graph)" },
       { "command": "embeddedHarness.addCustomLogPath", "title": "Embedded Harness: Add Custom Log Path" },
       { "command": "embeddedHarness.connectSerial", "title": "Embedded Harness: Connect MCU Serial" }
     ],
@@ -137,6 +138,11 @@
           }
         },
         "embeddedHarness.pollIntervalMs": { "type": "number", "default": 3000 },
+        "embeddedHarness.perfProfileDurationSec": {
+          "type": "number",
+          "default": 15,
+          "description": "Duration for perf record when generating flame graphs"
+        },
         "embeddedHarness.serialPort": { "type": "string", "default": "" },
         "embeddedHarness.serialBaudRate": { "type": "number", "default": 115200 },
         "embeddedHarness.hostToolchain.gdbPath": { "type": "string", "default": "" },

@@ -55,7 +55,7 @@ for d in /proc/[0-9]*; do
   rss=$(grep '^VmRSS:' "$d/status" 2>/dev/null | awk '{print $2}')
   [ -n "$comm" ] || continue
   cl=$(echo "$comm $cmd" | tr '[:upper:]' '[:lower:]')
-  case "$cl" in *"$q"*) echo "$pid|$comm|${rss:-0}|$cmd" ;; esac
+  case "$cl" in *"$q"*) echo "$pid|$comm|\${rss:-0}|$cmd" ;; esac
 done
 `;
 
