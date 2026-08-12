@@ -1,0 +1,179 @@
+{
+  "name": "embedded-harness",
+  "displayName": "Embedded Harness",
+  "description": "Monitor Embedded Linux and MCU from VSCode with MCP/AI diagnostics",
+  "version": "0.3.0",
+  "publisher": "embedded-harness",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Debuggers", "Other"],
+  "activationEvents": ["onView:embeddedHarness.targets"],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      { "command": "embeddedHarness.addTarget", "title": "Embedded Harness: Add Linux Target (SSH)", "icon": "$(add)" },
+      { "command": "embeddedHarness.addWslTarget", "title": "Embedded Harness: Add WSL Target", "icon": "$(terminal-linux)" },
+      { "command": "embeddedHarness.connect", "title": "Embedded Harness: Connect", "icon": "$(plug)" },
+      { "command": "embeddedHarness.disconnect", "title": "Embedded Harness: Disconnect", "icon": "$(debug-disconnect)" },
+      { "command": "embeddedHarness.refreshTargets", "title": "Embedded Harness: Refresh Targets", "icon": "$(refresh)" },
+      { "command": "embeddedHarness.showMetrics", "title": "Embedded Harness: Show Metrics Panel" },
+      { "command": "embeddedHarness.showLogs", "title": "Embedded Harness: Show Logs" },
+      { "command": "embeddedHarness.showTimeline", "title": "Embedded Harness: Show Unified Timeline" },
+      { "command": "embeddedHarness.setupCoreDump", "title": "Embedded Harness: Core Dump Setup Wizard" },
+      { "command": "embeddedHarness.setupDebugEnv", "title": "Embedded Harness: Debug Environment Wizard" },
+      { "command": "embeddedHarness.startMcpServer", "title": "Embedded Harness: Start MCP Server" },
+      { "command": "embeddedHarness.stopMcpServer", "title": "Embedded Harness: Stop MCP Server" },
+      { "command": "embeddedHarness.showMcpConfig", "title": "Embedded Harness: Show MCP Config for Cursor" },
+      { "command": "embeddedHarness.runDiagnostic", "title": "Embedded Harness: Run Diagnostic Template" },
+      { "command": "embeddedHarness.addWatchedProcess", "title": "Embedded Harness: Add Watched Process" },
+      { "command": "embeddedHarness.addCustomLogPath", "title": "Embedded Harness: Add Custom Log Path" },
+      { "command": "embeddedHarness.connectSerial", "title": "Embedded Harness: Connect MCU Serial" }
+    ],
+    "views": {
+      "embeddedHarness": [{ "id": "embeddedHarness.targets", "name": "Targets" }]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        { "id": "embeddedHarness", "title": "Embedded Harness", "icon": "$(radio-tower)" }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "embeddedHarness.targets",
+        "contents": "尚未配置目标。\n\n[添加 WSL Target（本机）](command:embeddedHarness.addWslTarget)\n\n[添加 SSH Target（板卡/远程）](command:embeddedHarness.addTarget)\n\n[打开设置 JSON](command:workbench.action.openSettingsJson)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "embeddedHarness.addWslTarget",
+          "when": "view == embeddedHarness.targets",
+          "group": "navigation@1"
+        },
+        {
+          "command": "embeddedHarness.addTarget",
+          "when": "view == embeddedHarness.targets",
+          "group": "navigation@2"
+        },
+        {
+          "command": "embeddedHarness.connect",
+          "when": "view == embeddedHarness.targets",
+          "group": "navigation@3"
+        },
+        {
+          "command": "embeddedHarness.refreshTargets",
+          "when": "view == embeddedHarness.targets",
+          "group": "navigation@4"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "embeddedHarness.connect",
+          "when": "view == embeddedHarness.targets && viewItem == target",
+          "group": "inline"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Embedded Harness",
+      "properties": {
+        "embeddedHarness.targets": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "host": { "type": "string" },
+              "port": { "type": "number", "default": 22 },
+              "username": { "type": "string" },
+              "privateKeyPath": { "type": "string" },
+              "remoteBinary": { "type": "string", "default": "harness-remote" },
+              "transport": {
+                "type": "string",
+                "enum": ["ssh", "wsl"],
+                "default": "ssh",
+                "description": "ssh for remote boards; wsl for local WSL on Windows"
+              },
+              "wslDistro": {
+                "type": "string",
+                "description": "WSL distro name, e.g. Ubuntu (transport=wsl only)"
+              },
+              "customLogPaths": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": { "type": "string" },
+                    "path": { "type": "string" },
+                    "label": { "type": "string" }
+                  }
+                }
+              },
+              "watchedProcesses": {
+                "type": "array",
+                "description": "Track specific processes by comm/cmdline substring",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "match": { "type": "string", "description": "Process name substring, e.g. nginx or myapp" },
+                    "label": { "type": "string" }
+                  },
+                  "required": ["match"]
+                }
+              },
+              "hostToolchain": {
+                "type": "object",
+                "properties": {
+                  "gdbPath": { "type": "string" },
+                  "sysroot": { "type": "string" },
+                  "elfPath": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "embeddedHarness.pollIntervalMs": { "type": "number", "default": 3000 },
+        "embeddedHarness.serialPort": { "type": "string", "default": "" },
+        "embeddedHarness.serialBaudRate": { "type": "number", "default": 115200 },
+        "embeddedHarness.hostToolchain.gdbPath": { "type": "string", "default": "" },
+        "embeddedHarness.hostToolchain.sysroot": { "type": "string", "default": "" },
+        "embeddedHarness.hostToolchain.elfPath": { "type": "string", "default": "" },
+        "embeddedHarness.alert.cpuThresholdPercent": { "type": "number", "default": 90 },
+        "embeddedHarness.alert.cpuSustainPolls": { "type": "number", "default": 3 },
+        "embeddedHarness.alert.memoryThresholdPercent": { "type": "number", "default": 90 },
+        "embeddedHarness.alert.logLevel": {
+          "type": "string",
+          "default": "ERROR",
+          "enum": ["DEBUG", "INFO", "WARN", "ERROR"]
+        },
+        "embeddedHarness.mcp.port": {
+          "type": "number",
+          "default": 9765,
+          "description": "Local SSE MCP server port"
+        },
+        "embeddedHarness.mcp.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Optional API key (X-Api-Key header for SSE MCP)"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "mcp:stdio": "node out/mcp/stdioMain.js"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "ssh2": "^1.15.0"
+  }
+}

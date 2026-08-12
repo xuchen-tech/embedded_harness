@@ -1,0 +1,13 @@
+[Unit]
+Description=Embedded Harness Remote Collector
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/harness-remote daemon
+Restart=always
+RestartSec=5
+OOMScoreAdjust=500
+
+[Install]
+WantedBy=multi-user.target

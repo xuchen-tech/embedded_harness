@@ -1,0 +1,27 @@
+{
+  "embeddedHarness.targets": [
+    {
+      "id": "wsl-ubuntu",
+      "host": "WSL",
+      "port": 0,
+      "username": "wsl",
+      "transport": "wsl",
+      "wslDistro": "Ubuntu-22.04",
+      "remoteBinary": "/mnt/d/projects/embedded_harness/harness-remote/build/harness-remote",
+      "customLogPaths": [],
+      "watchedProcesses": [
+        { "match": "node", "label": "Node.js" },
+        { "match": "nginx", "label": "Nginx" }
+      ]
+    },
+    {
+      "id": "board-a",
+      "host": "192.168.1.10",
+      "port": 22,
+      "username": "root",
+      "transport": "ssh",
+      "privateKeyPath": "C:/Users/you/.ssh/id_rsa",
+      "remoteBinary": "harness-remote"
+    }
+  ]
+}

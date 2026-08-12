@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "embedded-harness": {
+      "command": "node",
+      "args": [
+        "${workspaceFolder}/extension/out/mcp/stdioMain.js",
+        "--storage",
+        "${env:HARNESS_STORAGE_DIR}"
+      ],
+      "env": {
+        "HARNESS_STORAGE_DIR": "SET_TO_VSCODE_GLOBAL_STORAGE/history"
+      }
+    }
+  }
+}

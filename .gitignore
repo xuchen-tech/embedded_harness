@@ -1,0 +1,98 @@
+# =============================================================================
+# Embedded Harness — .gitignore
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# harness-remote (C)
+# -----------------------------------------------------------------------------
+harness-remote/build/
+harness-remote/dist/
+
+# Object files (Makefile emits *.o beside sources)
+*.o
+*.obj
+*.a
+*.so
+*.dylib
+
+# Binaries
+/harness-remote/build/harness-remote
+*.exe
+*.out
+
+# -----------------------------------------------------------------------------
+# extension (TypeScript / VS Code)
+# -----------------------------------------------------------------------------
+extension/node_modules/
+extension/out/
+extension/*.vsix
+
+# TypeScript incremental build info
+*.tsbuildinfo
+
+# npm / yarn debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# -----------------------------------------------------------------------------
+# VS Code / Cursor — ignore personal settings, keep shared workspace files
+# -----------------------------------------------------------------------------
+.vscode/*
+!.vscode/launch.json
+!.vscode/settings.example.json
+!.vscode/extensions.json
+!.vscode/tasks.json
+
+.idea/
+*.swp
+*.swo
+*~
+
+# Optional personal workspace files
+*.code-workspace
+
+# -----------------------------------------------------------------------------
+# Runtime data (local dev / downloaded artifacts)
+# -----------------------------------------------------------------------------
+# GDB / core dumps pulled from remote targets
+*.core
+core
+core.*
+*.dump
+
+# Local harness history / MCP state (if ever written under repo)
+.harness/
+history/
+*.jsonl
+
+# -----------------------------------------------------------------------------
+# OS
+# -----------------------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# -----------------------------------------------------------------------------
+# Secrets & credentials
+# -----------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_ed25519
+!*.pub
+
+# User-specific target settings (may contain SSH key paths)
+.vscode/settings.json

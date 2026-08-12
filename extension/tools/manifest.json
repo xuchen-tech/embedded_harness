@@ -1,0 +1,21 @@
+{
+  "version": "0.3.0",
+  "description": "Offline debug tool bundles indexed by target architecture",
+  "bundles": [
+    {
+      "arch": "aarch64",
+      "tools": ["gdb", "gdbserver", "strace"],
+      "tarPath": "bundles/harness-tools-aarch64.tar.gz"
+    },
+    {
+      "arch": "armhf",
+      "tools": ["gdb", "gdbserver", "strace"],
+      "tarPath": "bundles/harness-tools-armhf.tar.gz"
+    },
+    {
+      "arch": "x86_64",
+      "tools": ["gdb", "gdbserver", "perf", "strace"],
+      "tarPath": "bundles/harness-tools-x86_64.tar.gz"
+    }
+  ]
+}
