@@ -1,7 +1,9 @@
 export interface WatchedProcess {
-  /** Match /proc comm or cmdline substring, e.g. myapp or nginx */
+  /** Auto-generated match rule (=comm, path token, or substring) */
   match: string;
   label?: string;
+  /** Business name the user originally entered */
+  alias?: string;
 }
 
 export interface TargetConfig {

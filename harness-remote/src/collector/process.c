@@ -126,6 +126,10 @@ static int name_matches(const char *pattern, int pid, const char *comm) {
     if (!pattern || !pattern[0]) {
         return 0;
     }
+    if (pattern[0] == '=') {
+        pattern++;
+        return comm && strcmp(comm, pattern) == 0;
+    }
     if (comm && strstr(comm, pattern)) {
         return 1;
     }

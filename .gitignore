@@ -58,7 +58,7 @@ pnpm-debug.log*
 # -----------------------------------------------------------------------------
 # GDB / core dumps pulled from remote targets
 *.core
-core
+/core
 core.*
 *.dump
 

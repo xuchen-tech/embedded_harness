@@ -1,20 +1,32 @@
 import * as vscode from 'vscode';
 import { MetricsSnapshot } from '../types';
 
+type ProcessClickHandler = (pid: number, targetId: string) => void;
+
 export class MetricsPanel {
   public static current: MetricsPanel | undefined;
   private readonly panel: vscode.WebviewPanel;
   private history: Array<{ t: number; cpu: number; memUsed: number }> = [];
+  private onProcessClick?: ProcessClickHandler;
 
-  private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri) {
+  private constructor(panel: vscode.WebviewPanel) {
     this.panel = panel;
     this.panel.webview.html = this.getHtml();
+    this.panel.webview.onDidReceiveMessage((msg) => {
+      if (msg.type === 'openProcess' && typeof msg.pid === 'number' && msg.targetId) {
+        this.onProcessClick?.(msg.pid, msg.targetId);
+      }
+    });
     this.panel.onDidDispose(() => {
       MetricsPanel.current = undefined;
     });
   }
 
-  static show(extensionUri: vscode.Uri): MetricsPanel {
+  setProcessClickHandler(handler: ProcessClickHandler): void {
+    this.onProcessClick = handler;
+  }
+
+  static show(_extensionUri: vscode.Uri): MetricsPanel {
     if (MetricsPanel.current) {
       MetricsPanel.current.panel.reveal();
       return MetricsPanel.current;
@@ -25,7 +37,7 @@ export class MetricsPanel {
       vscode.ViewColumn.One,
       { enableScripts: true }
     );
-    MetricsPanel.current = new MetricsPanel(panel, extensionUri);
+    MetricsPanel.current = new MetricsPanel(panel);
     return MetricsPanel.current;
   }
 
@@ -47,6 +59,7 @@ export class MetricsPanel {
       payload: {
         history: this.history,
         latest: metrics,
+        targetId: metrics.targetId,
       },
     });
   }
@@ -65,6 +78,9 @@ export class MetricsPanel {
     canvas { width: 100%; height: 220px; background: var(--vscode-editor-background); border-radius: 6px; }
     table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 12px; }
     th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--vscode-panel-border); }
+    tr.clickable { cursor: pointer; }
+    tr.clickable:hover { background: var(--vscode-list-hoverBackground); }
+    .hint { font-size: 11px; opacity: 0.75; margin: 4px 0 8px; }
   </style>
 </head>
 <body>
@@ -75,13 +91,17 @@ export class MetricsPanel {
   </div>
   <canvas id="chart" width="900" height="220"></canvas>
   <h3>Watched Processes</h3>
+  <p class="hint">Business names auto-resolve to match rules. Click a row for /proc details.</p>
   <table><thead><tr><th>Label</th><th>PID</th><th>Name</th><th>CPU %</th><th>Mem (KB)</th></tr></thead><tbody id="watched"></tbody></table>
   <h3>Top Processes</h3>
+  <p class="hint">Click a row for /proc details.</p>
   <table><thead><tr><th>PID</th><th>Name</th><th>Mem (KB)</th></tr></thead><tbody id="procs"></tbody></table>
   <script>
+    const vscode = acquireVsCodeApi();
     const canvas = document.getElementById('chart');
     const ctx = canvas.getContext('2d');
     let history = [];
+    let currentTargetId = '';
 
     function draw() {
       const w = canvas.width, h = canvas.height;
@@ -106,9 +126,18 @@ export class MetricsPanel {
       ctx.stroke();
     }
 
+    function bindRow(tr, pid) {
+      tr.className = 'clickable';
+      tr.title = 'Click for /proc status, memory, threads';
+      tr.addEventListener('click', () => {
+        vscode.postMessage({ type: 'openProcess', pid, targetId: currentTargetId });
+      });
+    }
+
     window.addEventListener('message', (e) => {
       if (e.data.type !== 'metrics') return;
       history = e.data.payload.history || [];
+      currentTargetId = e.data.payload.targetId || '';
       const m = e.data.payload.latest;
       document.getElementById('cpu').textContent = m.cpu.usagePercent.toFixed(1) + '%';
       const memPct = m.memory.totalKb > 0
@@ -121,13 +150,14 @@ export class MetricsPanel {
       const wp = m.watchedProcesses || [];
       if (wp.length === 0) {
         const tr = document.createElement('tr');
-        tr.innerHTML = '<td colspan="5"><em>No watched processes — add via command palette: Add Watched Process</em></td>';
+        tr.innerHTML = '<td colspan="5"><em>No watched processes — Add Watched Process (command palette)</em></td>';
         watched.appendChild(tr);
       } else {
         wp.forEach(p => {
           const tr = document.createElement('tr');
           tr.innerHTML = '<td>' + (p.label || p.match) + '</td><td>' + p.pid + '</td><td>' + p.name +
             '</td><td>' + (p.cpuPercent ?? 0).toFixed(1) + '</td><td>' + p.memKb + '</td>';
+          bindRow(tr, p.pid);
           watched.appendChild(tr);
         });
       }
@@ -136,6 +166,7 @@ export class MetricsPanel {
       (m.topProcesses || []).slice(0, 10).forEach(p => {
         const tr = document.createElement('tr');
         tr.innerHTML = '<td>' + p.pid + '</td><td>' + p.name + '</td><td>' + p.memKb + '</td>';
+        bindRow(tr, p.pid);
         tbody.appendChild(tr);
       });
       draw();

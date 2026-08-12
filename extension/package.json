@@ -26,7 +26,8 @@
       { "command": "embeddedHarness.stopMcpServer", "title": "Embedded Harness: Stop MCP Server" },
       { "command": "embeddedHarness.showMcpConfig", "title": "Embedded Harness: Show MCP Config for Cursor" },
       { "command": "embeddedHarness.runDiagnostic", "title": "Embedded Harness: Run Diagnostic Template" },
-      { "command": "embeddedHarness.addWatchedProcess", "title": "Embedded Harness: Add Watched Process" },
+      { "command": "embeddedHarness.addWatchedProcess", "title": "Embedded Harness: Add Watched Process (Auto Match)" },
+      { "command": "embeddedHarness.removeWatchedProcess", "title": "Embedded Harness: Remove Watched Process" },
       { "command": "embeddedHarness.addCustomLogPath", "title": "Embedded Harness: Add Custom Log Path" },
       { "command": "embeddedHarness.connectSerial", "title": "Embedded Harness: Connect MCU Serial" }
     ],
@@ -113,12 +114,13 @@
               },
               "watchedProcesses": {
                 "type": "array",
-                "description": "Track specific processes by comm/cmdline substring",
+                "description": "Track business processes — match rules are auto-generated from /proc probe",
                 "items": {
                   "type": "object",
                   "properties": {
-                    "match": { "type": "string", "description": "Process name substring, e.g. nginx or myapp" },
-                    "label": { "type": "string" }
+                    "match": { "type": "string", "description": "Auto-generated: =comm, cmdline token, or substring" },
+                    "label": { "type": "string" },
+                    "alias": { "type": "string", "description": "Original business name entered by user" }
                   },
                   "required": ["match"]
                 }

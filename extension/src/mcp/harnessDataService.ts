@@ -6,7 +6,9 @@ import {
 } from '../core/harnessContext';
 import { HistoryStore } from '../core/historyStore';
 import { parseCapabilities, parseHarnessMessage, parseLogs, parseMetrics } from '../parsers/logParser';
-import { getTargetsFromSettings } from '../core/session';
+import { getTargetsFromSettings, saveTargets } from '../core/session';
+import { resolveWatchRules } from '../core/processMatchResolver';
+import { watchRuleToEntry } from '../core/watchProcessWizard';
 import {
   CoreDumpEvent,
   LogEntry,
@@ -115,6 +117,52 @@ export class HarnessDataService {
       }
     }
     return null;
+  }
+
+  async resolveProcessWatch(
+    targetId: string,
+    processName: string
+  ): Promise<{ recommended: unknown; alternatives: unknown[] }> {
+    const session = getSessionManager()?.get(targetId);
+    if (!session?.isConnected()) {
+      throw new Error('Target not connected — connect first for live /proc probe');
+    }
+    return resolveWatchRules(session.getTransport(), processName);
+  }
+
+  async addWatchedProcess(
+    targetId: string,
+    processName: string,
+    apply = true
+  ): Promise<{ entry: unknown; reason: string }> {
+    const session = getSessionManager()?.get(targetId);
+    if (!session?.isConnected()) {
+      throw new Error('Target not connected');
+    }
+    const { recommended } = await resolveWatchRules(session.getTransport(), processName);
+    const entry = watchRuleToEntry(recommended);
+
+    if (apply) {
+      const targets = getTargetsFromSettings();
+      const target = targets.find((t) => t.id === targetId);
+      if (!target) {
+        throw new Error(`Target not found: ${targetId}`);
+      }
+      target.watchedProcesses = target.watchedProcesses ?? [];
+      const idx = target.watchedProcesses.findIndex(
+        (w) => w.alias === entry.alias || w.match === entry.match
+      );
+      if (idx >= 0) {
+        target.watchedProcesses[idx] = entry;
+      } else {
+        target.watchedProcesses.push(entry);
+      }
+      await saveTargets(targets);
+      session.updateTarget(target);
+      await session.syncRemoteConfig();
+    }
+
+    return { entry, reason: recommended.reason };
   }
 
   writeMcpStateFile(statePath: string, storageDir: string, port: number, apiKey?: string): void {

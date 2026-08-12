@@ -24,6 +24,8 @@ import { SerialReader } from './transport/serialReader';
 import { targetDisplayLabel } from './transport/createTransport';
 import { addWslTargetInteractive } from './core/wslSetup';
 import { isWslAvailable } from './transport/wslClient';
+import { fetchProcessDetail, showProcessDetailPanel } from './core/processDetail';
+import { resolveAndPickWatchRule, watchRuleToEntry } from './core/watchProcessWizard';
 import { TargetConfig } from './types';
 
 class TargetTreeProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
@@ -179,6 +181,19 @@ export function activate(context: vscode.ExtensionContext): void {
     }
 
     const metricsPanel = MetricsPanel.show(context.extensionUri);
+    metricsPanel.setProcessClickHandler(async (pid, targetId) => {
+      const sess = sessions.get(targetId);
+      if (!sess?.isConnected()) {
+        vscode.window.showWarningMessage('Target not connected.');
+        return;
+      }
+      try {
+        const detail = await fetchProcessDetail(sess.getTransport(), pid);
+        await showProcessDetailPanel(detail);
+      } catch (e) {
+        vscode.window.showErrorMessage(`Process detail failed: ${e}`);
+      }
+    });
     const timeline = TimelineView.show();
     logView.show();
 
@@ -363,30 +378,100 @@ export function activate(context: vscode.ExtensionContext): void {
         placeHolder: 'Target',
       });
       if (!id) return;
-      const match = await vscode.window.showInputBox({
-        prompt: 'Process name to match (comm or cmdline substring)',
-        placeHolder: 'e.g. myapp, nginx, node',
+      const businessName = await vscode.window.showInputBox({
+        prompt: 'Business process name (e.g. payment-service, nginx, myapp)',
+        placeHolder: 'Enter process or service name — match rule is auto-generated',
       });
-      if (!match) return;
-      const label = await vscode.window.showInputBox({
-        prompt: 'Display label (optional)',
-        value: match,
-      });
+      if (!businessName) return;
+
       const target = targets.find((t) => t.id === id)!;
+      const session = sessions.get(id);
+      const transport = session?.isConnected() ? session.getTransport() : undefined;
+
+      if (!transport) {
+        const go = await vscode.window.showWarningMessage(
+          'Target not connected — rule will be guessed offline. Connect for auto-detect from /proc.',
+          'Connect now',
+          'Save anyway'
+        );
+        if (go === 'Connect now') {
+          await startSession(target);
+          const connected = sessions.get(id);
+          if (!connected?.isConnected()) {
+            return;
+          }
+        } else if (go !== 'Save anyway') {
+          return;
+        }
+      }
+
+      const activeSession = sessions.get(id);
+      const rule = await resolveAndPickWatchRule(
+        activeSession?.isConnected() ? activeSession.getTransport() : undefined,
+        businessName
+      );
+      const entry = watchRuleToEntry(rule);
+
       target.watchedProcesses = target.watchedProcesses ?? [];
-      const exists = target.watchedProcesses.some((w) => w.match === match);
-      if (!exists) {
-        target.watchedProcesses.push({ match, label: label ?? match });
+      const existsIdx = target.watchedProcesses.findIndex(
+        (w) => w.alias === entry.alias || w.match === entry.match
+      );
+      if (existsIdx >= 0) {
+        target.watchedProcesses[existsIdx] = entry;
+      } else {
+        target.watchedProcesses.push(entry);
       }
       await saveTargets(targets);
-      if (sessions.get(id)?.isConnected()) {
-        const t = targets.find((x) => x.id === id)!;
-        await startSession(t);
+      const updatedSession = sessions.getOrCreate(target);
+      if (updatedSession.isConnected()) {
+        try {
+          await updatedSession.syncRemoteConfig();
+          vscode.window.showInformationMessage(
+            `Watching "${businessName}" → match \`${entry.match}\` (${rule.reason})`
+          );
+        } catch (e) {
+          vscode.window.showErrorMessage(`Deploy watched process config failed: ${e}`);
+        }
       } else {
         vscode.window.showInformationMessage(
-          `Watched process "${match}" saved. Connect target "${id}" to start tracking.`
+          `Saved watch for "${businessName}" → \`${entry.match}\`. Connect to apply.`
         );
       }
+    }),
+
+    vscode.commands.registerCommand('embeddedHarness.removeWatchedProcess', async () => {
+      const targets = getTargetsFromSettings();
+      const id = await vscode.window.showQuickPick(targets.map((t) => t.id), {
+        placeHolder: 'Target',
+      });
+      if (!id) return;
+      const target = targets.find((t) => t.id === id)!;
+      const list = target.watchedProcesses ?? [];
+      if (list.length === 0) {
+        vscode.window.showInformationMessage('No watched processes on this target.');
+        return;
+      }
+      const pick = await vscode.window.showQuickPick(
+        list.map((w) => ({
+          label: `${w.label ?? w.match}`,
+          description: `match: ${w.match}`,
+          match: w.match,
+        })),
+        { placeHolder: 'Select watched process to remove' }
+      );
+      if (!pick) return;
+      target.watchedProcesses = list.filter((w) => w.match !== pick.match);
+      await saveTargets(targets);
+      const session = sessions.getOrCreate(target);
+      if (session.isConnected()) {
+        try {
+          await session.syncRemoteConfig();
+        } catch (e) {
+          vscode.window.showErrorMessage(`Remove failed to sync remote config: ${e}`);
+          return;
+        }
+      }
+      vscode.window.showInformationMessage(`Removed watched process "${pick.match}".`);
     }),
 
     vscode.commands.registerCommand('embeddedHarness.addCustomLogPath', async () => {

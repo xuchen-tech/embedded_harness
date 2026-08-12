@@ -103,6 +103,39 @@ export function createHarnessMcpServer(data: HarnessDataService): Server {
           required: ['targetId'],
         },
       },
+      {
+        name: 'resolve_process_watch',
+        description:
+          'Probe /proc on a connected target and auto-generate watch match rules for a business process name (for AI-assisted setup)',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            targetId: { type: 'string' },
+            processName: {
+              type: 'string',
+              description: 'User-facing process/service name, e.g. payment-service or nginx',
+            },
+          },
+          required: ['targetId', 'processName'],
+        },
+      },
+      {
+        name: 'add_watched_process',
+        description:
+          'Auto-resolve and add a watched process for metrics tracking (uses /proc probe when connected)',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            targetId: { type: 'string' },
+            processName: { type: 'string' },
+            apply: {
+              type: 'boolean',
+              description: 'Write to settings and deploy remote config (default true)',
+            },
+          },
+          required: ['targetId', 'processName'],
+        },
+      },
     ],
   }));
 
@@ -165,6 +198,16 @@ async function dispatchTool(
 
     case 'analyze_launch_failure':
       return analyzeLaunchFailure(data, targetId, args.serviceName as string | undefined);
+
+    case 'resolve_process_watch':
+      return data.resolveProcessWatch(targetId, String(args.processName ?? ''));
+
+    case 'add_watched_process':
+      return data.addWatchedProcess(
+        targetId,
+        String(args.processName ?? ''),
+        args.apply !== false
+      );
 
     default:
       throw new Error(`Unknown tool: ${name}`);
